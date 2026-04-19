@@ -143,6 +143,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.csv
+.db
 
 # Spyder project settings
 .spyderproject
@@ -205,3 +207,40 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ========================
+# DATABASE
+# ========================
+database/db.sqlite3
+*.db
+
+# ========================
+# DATASETS
+# ========================
+data/
+*.csv
+*.xlsx
+
+# ========================
+# LOGS
+# ========================
+logs/
+*.log
+
+# ========================
+# PYTHON
+# ========================
+__pycache__/
+*.pyc
+
+# ========================
+# ENV
+# ========================
+env/
+venv/
+.fp/
+
+# ========================
+# STREAMLIT
+# ========================
+.streamlit/
