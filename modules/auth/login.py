@@ -1,55 +1,39 @@
 import streamlit as st
 from modules.auth.auth_service import login_user
-from utils.session_manager import login
+from utils.session_manager import set_session
 
 
 def login_page():
 
-    
-    st.markdown(
-        "<h1 style='text-align: center;'>FraudPulse System</h1>",
-        unsafe_allow_html=True
-    )
+    st.title("FraudPulse System")
+    st.subheader("Login")
 
-    st.markdown(
-        "<p style='text-align: center; font-size:18px; font-weight:600;'>"
-        "Advanced Fraud Detection and Risk Analysis for Banking"
-        "</p>",
-        unsafe_allow_html=True
-    )
-
-    st.divider()
-
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-
-    with col2:
-        st.subheader("Login")
+    with st.form("login_form"):
 
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
 
-        if st.button("Login", use_container_width=True):
+        submit = st.form_submit_button("Login")
 
-            
-            email = email.lower().strip()
+        if submit:
 
-            
+            email = email.strip()
+            password = password.strip()
+
             if not email or not password:
                 st.warning("Please enter email and password")
                 return
 
-            # Authenticate
             role, position = login_user(email, password)
 
             if role:
-                # 🔷 Store session
-                login(role, position)
+                set_session(email, role, position)
 
-                # IMPORTANT: store email for dashboard filtering
-                st.session_state["email"] = email
+                if role == "admin":
+                    st.session_state["admin_page"] = "dashboard"
+                else:
+                    st.session_state["page"] = "dashboard"
 
-                st.success(f"Welcome {position}")
                 st.rerun()
 
             else:

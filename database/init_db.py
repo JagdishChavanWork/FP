@@ -1,7 +1,6 @@
 import sqlite3
 import bcrypt
 
-
 DB_PATH = "database/db.sqlite3"
 
 
@@ -32,7 +31,7 @@ def create_tables():
     """)
 
     # =========================================================
-    # CASES TABLE (FRAUD + RISK READY)
+    # FRAUD CASES TABLE
     # =========================================================
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS cases (
@@ -67,6 +66,47 @@ def create_tables():
         )
     """)
 
+    # =========================================================
+    # RISK CASES TABLE (NEW)
+    # =========================================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS risk_cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            customer_id TEXT,
+
+            age INTEGER,
+            annual_income REAL,
+            monthly_income REAL,
+
+            num_bank_accounts INTEGER,
+            num_credit_cards INTEGER,
+            num_loans INTEGER,
+
+            interest_rate REAL,
+            delay_days INTEGER,
+            credit_utilization REAL,
+
+            outstanding_debt REAL,
+            emi_per_month REAL,
+
+            credit_history_age INTEGER,
+
+            system_risk TEXT,
+            analyst_decision TEXT,
+            analyst_comments TEXT,
+
+            recommended_limit REAL,
+            approved_limit REAL,
+
+            status TEXT DEFAULT 'Pending',
+
+            created_at TEXT,
+            completed_at TEXT,
+            duration_seconds REAL
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -75,7 +115,6 @@ def create_default_admin():
     conn = create_connection()
     cursor = conn.cursor()
 
-    # Check if admin exists
     cursor.execute("SELECT * FROM users WHERE role = 'admin'")
     admin = cursor.fetchone()
 
