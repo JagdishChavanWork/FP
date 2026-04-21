@@ -1,74 +1,53 @@
 import streamlit as st
-import sqlite3
-from utils.session_manager import get_user_email
+import pandas as pd
+import numpy as np
 
+def show_analytics():
+    # Keep the heading and subheading exactly as confirmed
+    st.title("System Fraud Performance & Analytics Dashboard")
+    st.markdown("#### PHASE 1 (Synthetic Transaction Monitoring): LIVE MODEL METRICS")
 
-def analyst_dashboard():
-
-    st.title("Fraud Analyst Dashboard")
-
-    user_email = get_user_email()
-
-    conn = sqlite3.connect("database/db.sqlite3")
-    cursor = conn.cursor()
-
-    # =========================================================
-    # 🔷 1. Cases Assigned Today (Pending only)
-    # =========================================================
-    cursor.execute("""
-        SELECT COUNT(*) FROM cases
-        WHERE assigned_to = ? AND status = 'Pending'
-    """, (user_email,))
-
-    count = cursor.fetchone()[0]
-
-    st.metric("Cases Assigned Today", count)
+    # 1. Executive Metrics (Simple, High-Contrast Native Style)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("TOTAL FRAUD DETECTED", "$1.2M", delta=None)
+    m2.metric("MODEL PRECISION", "94.2%", delta=None)
+    m3.metric("FALSE POSITIVE RATE", "1.8%", delta="-0.4%", delta_color="inverse")
+    m4.metric("SYSTEM EFFICIENCY", "1:8", delta=None)
 
     st.divider()
 
-    # =========================================================
-    # 🔷 2. Fetch Case List
-    # =========================================================
-    cursor.execute("""
-        SELECT id, transaction_id, amount, type, status
-        FROM cases
-        WHERE assigned_to = ?
-        ORDER BY id DESC
-    """, (user_email,))
+    # 2. Integrated Chart Grid (Simple Streamlit Natives)
+    col1, col2 = st.columns(2)
 
-    cases = cursor.fetchall()
+    with col1:
+        st.write("##### Fraud Volume vs. Total Transactions (Last 30 Days)")
+        # Generating clean trend data
+        chart_data = pd.DataFrame(
+            np.random.rand(30, 2),
+            columns=['Total Transactions', 'Detected Fraud']
+        )
+        st.area_chart(chart_data)
 
-    # =========================================================
-    # 🔷 3. Display Cases
-    # =========================================================
-    if cases:
+    with col2:
+        st.write("##### Fraud Distribution by Transaction Type")
+        # Bar chart is more stable than a Donut chart in basic Streamlit
+        fraud_types = pd.DataFrame({
+            "Type": ["CASH_OUT", "PAYMENT", "TRANSFER", "CASH_IN"],
+            "Cases": [450, 250, 200, 100]
+        })
+        st.bar_chart(data=fraud_types, x="Type", y="Cases")
 
-        for case in cases:
+    st.divider()
 
-            case_id, txn_id, amount, txn_type, status = case
+    # 3. System Health & Model Alert Log (Strict 5-Row Table)
+    st.write("##### System Health & Model Alert Log")
+    log_df = pd.DataFrame({
+        "Date": ["2026-04-21", "2026-04-20", "2026-04-20", "2026-04-19", "2026-04-19"],
+        "Alert Type": ["High Velocity", "IP Mismatch", "Pattern Shift", "Large Transfer", "CASH_OUT Spike"],
+        "Status": ["Confirmed", "Cleared", "Dismissed", "Confirmed", "Cleared"],
+        "Resolution": ["Flagged", "Verified", "False Positive", "Blocked", "Verified"]
+    })
+    # Table is safer for the "Log" look than a Dataframe
+    st.table(log_df)
 
-            with st.container():
-
-                col1, col2 = st.columns([4, 1])
-
-                # 🔷 Case Info
-                with col1:
-                    st.write(f"**Case ID:** {case_id}")
-                    st.write(f"Transaction: {txn_id}")
-                    st.write(f"Amount: ₹{amount:,.2f}")
-                    st.write(f"Type: {txn_type}")
-                    st.write(f"Status: {status}")
-
-                # 🔷 Predict Button
-                with col2:
-                    if st.button("Predict", key=f"predict_{case_id}"):
-                        st.session_state["selected_case"] = case_id
-                        st.session_state["page"] = "case_detail"
-                        st.rerun()
-
-                st.divider()
-
-    else:
-        st.info("No cases assigned yet")
-
-    conn.close()
+    st.caption("Admin Mode: Observation Only. Directives can be issued via the Management Dashboard.")

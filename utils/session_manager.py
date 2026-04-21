@@ -1,44 +1,29 @@
 import streamlit as st
 
+print("--- Session Manager Loaded Successfully ---")
 
-# =========================================================
-# SET SESSION
-# =========================================================
-def set_session(email, role, position):
-
+def login_user(user_data):
+    """Stores user info in the session state."""
     st.session_state["logged_in"] = True
-    st.session_state["email"] = email
-    st.session_state["role"] = role
-    st.session_state["position"] = position
-
-    if role == "admin":
-        st.session_state["admin_page"] = "dashboard"
-    else:
-        st.session_state["page"] = "dashboard"
-
-
-# =========================================================
-# GETTERS
-# =========================================================
-def get_user_email():
-    return st.session_state.get("email")
-
-
-def get_role():
-    return st.session_state.get("role")
-
-
-def get_position():
-    return st.session_state.get("position")
-
+    st.session_state["user_info"] = user_data
 
 def is_logged_in():
+    """Checks if a user is currently logged in."""
     return st.session_state.get("logged_in", False)
 
+def get_role():
+    """Returns the role (admin/analyst)."""
+    return st.session_state.get("user_info", {}).get("role")
 
-# =========================================================
-# LOGOUT
-# =========================================================
+def get_position():
+    """Returns the specific position."""
+    return st.session_state.get("user_info", {}).get("position")
+
+def get_user_email():
+    """Returns the email of the logged-in user."""
+    return st.session_state.get("user_info", {}).get("email")
+
 def logout():
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
+    """Clears the session state."""
+    st.session_state["logged_in"] = False
+    st.session_state["user_info"] = {}

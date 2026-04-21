@@ -1,152 +1,78 @@
 import streamlit as st
 import sqlite3
-import pandas as pd
-
-from utils.model_loader import load_model
-from utils.session_manager import get_role
+import numpy as np
+import joblib # Using joblib to match our training script
 from services.case_service import mark_case_completed
 
-
-DB_PATH = "database/db.sqlite3"
-
-
-def get_case_by_id(case_id):
-    conn = sqlite3.connect(DB_PATH)
+def case_detail():
+    case_id = st.session_state.get("selected_case")
+    conn = sqlite3.connect("database/db.sqlite3")
     cursor = conn.cursor()
-
     cursor.execute("SELECT * FROM cases WHERE id = ?", (case_id,))
     case = cursor.fetchone()
-
     conn.close()
-    return case
 
-
-def case_detail():
-
-    case_id = st.session_state.get("selected_case")
-
-    if not case_id:
-        st.warning("No case selected")
-        return
-
-    # =========================================================
-    # LOAD CASE
-    # =========================================================
-    case = get_case_by_id(case_id)
-
-    if not case:
-        st.error("Case not found")
-        return
-
-    # =========================================================
-    # DISPLAY CASE INFO
-    # =========================================================
-    st.title(f"Case Detail - ID {case_id}")
-
-    st.subheader("Transaction Details")
-
-    st.write(f"Transaction ID: {case[1]}")
-    st.write(f"Step: {case[2]}")
-    st.write(f"Type: {case[3]}")
-    st.write(f"Amount: ₹{case[4]:,.2f}")
-
-    st.write(f"Old Balance (Sender): {case[5]}")
-    st.write(f"New Balance (Sender): {case[6]}")
-    st.write(f"Old Balance (Receiver): {case[7]}")
-    st.write(f"New Balance (Receiver): {case[8]}")
+    st.title("🔍 Transaction Audit Deep-Dive")
+    
+    # 1. Visual Top Bar
+    cols = st.columns([1,1,1,1])
+    cols[0].metric("Amount", f"₹{case[4]:,.2f}")
+    cols[1].metric("Type", case[3])
+    cols[2].metric("Origin Balance", f"₹{case[5]:,.2f}")
+    cols[3].metric("Dest Balance", f"₹{case[8]:,.2f}")
 
     st.divider()
 
-    # =========================================================
-    # LOAD MODEL
-    # =========================================================
-    model_data = load_model("models/fraud/fraud_model.pkl")
+    # 2. AI Risk Scan
+    st.subheader("🤖 AI Forensic Analysis")
+    if st.button("🚀 Run Neural Risk Scan", use_container_width=True):
+        with st.spinner("Analyzing transaction patterns..."):
+            try:
+                # Load the dictionary-wrapped model we just trained
+                data = joblib.load("models/fraud/fraud_model.pkl")
+                model = data['model']
+                
+                # Feature Prep
+                features = np.array([[
+                    case[2], case[4], case[5], case[6], 
+                    case[7], case[8], case[9], case[10], 
+                    case[11], case[12]
+                ]])
 
-    if isinstance(model_data, dict):
-        model = model_data.get("model")
-    else:
-        model = model_data
+                prediction = model.predict(features)[0]
+                prob = model.predict_proba(features)[0][1] # Get fraud probability
 
-    # =========================================================
-    # FRAUD CHECK
-    # =========================================================
-    st.subheader("Fraud Analysis")
+                st.session_state["sys_res"] = "Fraudulent" if prediction == 1 else "Safe"
+                st.session_state["risk_score"] = prob * 100
 
-    if st.button("Check Fraud"):
+            except Exception as e:
+                st.error(f"Scan failed: {e}")
 
-        input_df = pd.DataFrame([{
-            "step": case[2],
-            "amount": case[4],
-            "oldbalanceOrg": case[5],
-            "newbalanceOrig": case[6],
-            "oldbalanceDest": case[7],
-            "newbalanceDest": case[8],
-            "isFlaggedFraud": case[9],
-            "balanceDiffOrig": case[10],
-            "balanceDiffDest": case[11],
-            "type_TRANSFER": case[12]
-        }])
-
-        prediction = model.predict(input_df)[0]
-
-        result = "Fraudulent" if prediction == 1 else "Non-Fraudulent"
-
-        st.session_state["system_result"] = result
-
-        if prediction == 1:
-            st.error("High Risk Transaction")
+    # 3. Visual Risk Result
+    if "sys_res" in st.session_state:
+        score = st.session_state["risk_score"]
+        if score > 70:
+            st.error(f"🚨 CRITICAL RISK DETECTED: {score:.1f}% Match with Fraud Patterns")
+        elif score > 30:
+            st.warning(f"⚠️ MODERATE RISK: {score:.1f}% Suspicious Activity")
         else:
-            st.success("Low Risk Transaction")
+            st.success(f"✅ LOW RISK: {score:.1f}% Probability of Legitimacy")
 
-    # =========================================================
-    # ANALYST DECISION (FIXED SECTION)
-    # =========================================================
-    if "system_result" in st.session_state:
-
-        st.divider()
-        st.subheader("Final Decision")
-
-        analyst_decision = st.radio(
-            "Select Fraud Type",
-            ["Fraudulent", "Non-Fraudulent"]
-        )
-
-        comments = st.text_area("Analyst Comments")
-
-        if st.button("Submit Decision"):
-
-            mark_case_completed(
-                case_id,
-                st.session_state["system_result"],
-                analyst_decision,
-                comments
-            )
-
-            st.success("Case updated successfully")
-
-            del st.session_state["system_result"]
-
-            go_back()
-
-    # =========================================================
-    # BACK BUTTON (ALWAYS AVAILABLE)
-    # =========================================================
     st.divider()
 
-    if st.button("Back to Dashboard"):
-        go_back()
+    # 4. Analyst Final Verdict
+    st.subheader("✍️ Analyst Determination")
+    verdict = st.radio("Select Final Action:", ["Approve Transaction", "Flag as Fraud & Freeze Account"])
+    comments = st.text_area("Audit Notes", placeholder="Why are you making this decision?")
 
-
-# =========================================================
-# NAVIGATION HANDLER
-# =========================================================
-def go_back():
-
-    role = get_role()
-
-    if role == "admin":
-        st.session_state["admin_page"] = "dashboard"
-    else:
+    c1, c2 = st.columns(2)
+    if c1.button("💾 Submit Decision", type="primary", use_container_width=True):
+        sys_res = st.session_state.get("sys_res", "Not Run")
+        mark_case_completed(case_id, sys_res, verdict, comments)
+        st.success("Decision Logged to Core Banking System")
         st.session_state["page"] = "dashboard"
-
-    st.rerun()
+        st.rerun()
+    
+    if c2.button("🔙 Return to Queue", use_container_width=True):
+        st.session_state["page"] = "dashboard"
+        st.rerun()

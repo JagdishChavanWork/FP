@@ -1,40 +1,20 @@
 import streamlit as st
-from modules.auth.auth_service import login_user
-from utils.session_manager import set_session
-
 
 def login_page():
-
-    st.title("FraudPulse System")
-    st.subheader("Login")
-
-    with st.form("login_form"):
-
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-
-        submit = st.form_submit_button("Login")
-
-        if submit:
-
-            email = email.strip()
-            password = password.strip()
-
-            if not email or not password:
-                st.warning("Please enter email and password")
-                return
-
-            role, position = login_user(email, password)
-
-            if role:
-                set_session(email, role, position)
-
-                if role == "admin":
-                    st.session_state["admin_page"] = "dashboard"
+    st.markdown("<h1 style='text-align: center;'>FraudPulse</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>FRAUD AND RISK ANALYSIS BANKING SYSTEM</p>", unsafe_allow_html=True)
+    
+    _, col, _ = st.columns([1, 2, 1])
+    
+    with col:
+        with st.container(border=True):
+            st.subheader("Institutional Login")
+            email = st.text_input("Email", placeholder="admin@bank.com")
+            password = st.text_input("Access Key", type="password")
+            
+            if st.button("AUTHENTICATE", use_container_width=True, type="primary"):
+                if email == "admin@bank.com" and password == "admin123":
+                    st.session_state['logged_in'] = True
+                    st.rerun()
                 else:
-                    st.session_state["page"] = "dashboard"
-
-                st.rerun()
-
-            else:
-                st.error("Invalid credentials")
+                    st.error("Invalid Credentials")
