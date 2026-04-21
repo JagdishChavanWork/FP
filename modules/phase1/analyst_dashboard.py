@@ -1,53 +1,74 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+from utils.db_controller import execute_custom_query, save_analyst_verdict
 
-def show_analytics():
-    # Keep the heading and subheading exactly as confirmed
-    st.title("System Fraud Performance & Analytics Dashboard")
-    st.markdown("#### PHASE 1 (Synthetic Transaction Monitoring): LIVE MODEL METRICS")
+def show_fraud_analyst_dash():
+    case_id = st.session_state.get('selected_case_id')
+    
+    if not case_id:
+        st.warning("No case selected. Please return to the Task Queue.")
+        if st.button("Back to Queue"):
+            st.session_state['nav'] = "Analyst_Queue"
+            st.rerun()
+        return
 
-    # 1. Executive Metrics (Simple, High-Contrast Native Style)
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("TOTAL FRAUD DETECTED", "$1.2M", delta=None)
-    m2.metric("MODEL PRECISION", "94.2%", delta=None)
-    m3.metric("FALSE POSITIVE RATE", "1.8%", delta="-0.4%", delta_color="inverse")
-    m4.metric("SYSTEM EFFICIENCY", "1:8", delta=None)
+    st.title("Fraud Analyst Workspace")
+    st.markdown(f"#### ANALYZING TRANSACTION ID: TXN-{case_id}")
 
-    st.divider()
+    # Fetch data for the specific case
+    query = f"SELECT * FROM fraud_data WHERE id = {case_id}"
+    df = execute_custom_query(query)
 
-    # 2. Integrated Chart Grid (Simple Streamlit Natives)
-    col1, col2 = st.columns(2)
+    if not df.empty:
+        txn = df.iloc[0]
+        
+        col_left, col_right = st.columns([1.5, 1])
 
-    with col1:
-        st.write("##### Fraud Volume vs. Total Transactions (Last 30 Days)")
-        # Generating clean trend data
-        chart_data = pd.DataFrame(
-            np.random.rand(30, 2),
-            columns=['Total Transactions', 'Detected Fraud']
-        )
-        st.area_chart(chart_data)
+        with col_left:
+            st.write("##### TRANSACTION DETAILS")
+            with st.container(border=True):
+                details = {
+                    "Attribute": ["Type", "Amount", "Origin", "Dest", "Old Balance", "New Balance"],
+                    "Details": [txn['type'], f"${txn['amount']:,}", txn['nameOrig'], txn['nameDest'], 
+                                f"${txn['oldbalanceOrg']:,}", f"${txn['newbalanceOrig']:,}"]
+                }
+                st.table(pd.DataFrame(details))
 
-    with col2:
-        st.write("##### Fraud Distribution by Transaction Type")
-        # Bar chart is more stable than a Donut chart in basic Streamlit
-        fraud_types = pd.DataFrame({
-            "Type": ["CASH_OUT", "PAYMENT", "TRANSFER", "CASH_IN"],
-            "Cases": [450, 250, 200, 100]
-        })
-        st.bar_chart(data=fraud_types, x="Type", y="Cases")
+        with col_right:
+            st.write("##### ANALYSIS & DECISION")
+            with st.container(border=True):
+                # Execute Prediction UI
+                if st.button("EXECUTE ML PREDICTION", type="primary", use_container_width=True):
+                    st.error(f"HIGH RISK: 94.2% Probability")
+                
+                # VERDICT FORM
+                with st.form("verdict_form", border=False):
+                    verdict = st.radio("Final Verdict", ["Confirmed Fraud", "Legitimate Transaction"])
+                    comment = st.text_area("Analyst Comment", placeholder="Enter reasoning...")
+                    
+                    submit = st.form_submit_button("SUBMIT VERDICT", use_container_width=True, type="primary")
 
-    st.divider()
-
-    # 3. System Health & Model Alert Log (Strict 5-Row Table)
-    st.write("##### System Health & Model Alert Log")
-    log_df = pd.DataFrame({
-        "Date": ["2026-04-21", "2026-04-20", "2026-04-20", "2026-04-19", "2026-04-19"],
-        "Alert Type": ["High Velocity", "IP Mismatch", "Pattern Shift", "Large Transfer", "CASH_OUT Spike"],
-        "Status": ["Confirmed", "Cleared", "Dismissed", "Confirmed", "Cleared"],
-        "Resolution": ["Flagged", "Verified", "False Positive", "Blocked", "Verified"]
-    })
-    # Table is safer for the "Log" look than a Dataframe
-    st.table(log_df)
-
-    st.caption("Admin Mode: Observation Only. Directives can be issued via the Management Dashboard.")
+                    if submit:
+                        if not comment:
+                            st.warning("Please add a comment.")
+                        else:
+                            # --- THIS IS THE KEY PART ---
+                            # This calls the function we added to db_controller
+                            success = save_analyst_verdict(
+                                case_id=case_id,
+                                case_type="Fraud",
+                                model_verdict="High Risk",
+                                analyst_verdict=verdict,
+                                comment=comment
+                            )
+                            
+                            if success:
+                                st.success(f"Case TXN-{case_id} Resolved!")
+                                # Clear selection and go back to see the updated counters
+                                del st.session_state['selected_case_id']
+                                st.session_state['nav'] = "Analyst_Queue"
+                                st.rerun()
+                            else:
+                                st.error("Database Save Failed.")
+    else:
+        st.error("Transaction not found.")

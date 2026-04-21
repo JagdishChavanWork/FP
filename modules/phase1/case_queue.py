@@ -1,48 +1,83 @@
 import streamlit as st
 import pandas as pd
-from utils.data_loader import load_fraud_data, load_risk_data
+from utils.db_controller import execute_custom_query
 
+# ==========================================
+# 1. ADMIN VIEW: Global System Overview
+# ==========================================
 def show_case_queue():
-    st.title("Institutional Admin View")
+    st.title("Global Case Management")
+    st.markdown("#### SYSTEM-WIDE PENDING TASKS")
+
+    # Mapping to your specific CSV table names
+    f_pending = execute_custom_query("SELECT id, 'Fraud' as dept, amount as val FROM fraud_sample WHERE id NOT IN (SELECT case_id FROM cases_resolved WHERE type='Fraud Detection') LIMIT 10")
+    r_pending = execute_custom_query("SELECT id, 'Risk' as dept, Annual_Income as val FROM credit_risk_production_final WHERE id NOT IN (SELECT case_id FROM cases_resolved WHERE type='Credit Risk') LIMIT 10")
     
-    # Dynamic Metrics Header
-    # These values shift based on which feed is selected below
-    m1, m2, m3, m4 = st.columns(4)
+    combined = pd.concat([f_pending, r_pending], ignore_index=True)
     
-    # Tabs for the different data streams
-    tab1, tab2 = st.tabs(["Financial Fraud Feed", "Credit Risk Feed"])
+    if not combined.empty:
+        st.dataframe(combined, use_container_width=True, hide_index=True)
+    else:
+        st.success("All queues are clear!")
 
-    with tab1:
-        # Update metrics for Fraud
-        m1.metric("HIGH PRIORITY", "245", "Immediate Action")
-        m2.metric("PENDING QUEUE", "958", "Avg. Wait: 4.2m")
-        m3.metric("COMPLETED TODAY", "42", "Target: 50")
-        m4.metric("SYSTEM HEALTH", "Secure", "SSL Verified")
+# ==========================================
+# 2. FRAUD ANALYST VIEW: Phase 1
+# ==========================================
+def show_analyst_task_queue():
+    st.title("Fraud Analyst Workspace")
+    st.markdown("#### PENDING FRAUD INVESTIGATIONS")
 
-        st.write("### Triage Queue")
-        df_f = load_fraud_data(nrows=5) # Strict 5-row limit
-        st.dataframe(df_f, use_container_width=True, hide_index=True)
+    # Using fraud_sample table
+    query = """
+        SELECT id, amount, merchant, category 
+        FROM fraud_sample 
+        WHERE id NOT IN (SELECT case_id FROM cases_resolved WHERE type = 'Fraud Detection')
+        LIMIT 15
+    """
+    df = execute_custom_query(query)
 
-    with tab2:
-        # Update metrics for Risk
-        m1.metric("RISK ALERTS", "112", "Critical Flags")
-        m2.metric("APPLICATIONS", "430", "Avg. Wait: 12.5m")
-        m3.metric("VERIFIED", "18", "Target: 25")
-        m4.metric("RISK ENGINE", "Active", "Model v2.4")
+    if not df.empty:
+        for _, row in df.iterrows():
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([2, 2, 1])
+                # Note: Adjust 'amount' column name if it differs in your CSV
+                c1.write(f"**TXN-{row['id']}** | **Amt:** ${row['amount']}")
+                c2.write(f"**Merchant:** {row['merchant']}")
+                if c3.button("INVESTIGATE", key=f"f_{row['id']}", use_container_width=True, type="primary"):
+                    st.session_state['selected_case_id'] = row['id']
+                    st.rerun()
+    else:
+        st.info("No pending fraud cases in 'fraud_sample' table.")
 
-        st.write("### Triage Queue")
-        df_r = load_risk_data(nrows=5) # Strict 5-row limit
-        st.dataframe(df_r, use_container_width=True, hide_index=True)
+# ==========================================
+# 3. RISK ANALYST VIEW: Phase 2
+# ==========================================
+def show_risk_task_queue():
+    st.title("Risk Analyst Workspace")
+    st.markdown("#### CREDIT REVIEW QUEUE")
 
-    st.divider()
-
-    # Analyst Investigation & Review Log (Admin Monitoring Only)
-    st.write("### Analyst Investigation & Review Log")
+    # Using credit_risk_production_final table
+    total_r = execute_custom_query("SELECT count(*) as count FROM credit_risk_production_final").iloc[0]['count']
+    done_r = len(execute_custom_query("SELECT case_id FROM cases_resolved WHERE type = 'Credit Risk'"))
     
-    log_data = {
-        "Case Number": ["20000001", "20000002", "20000003", "20000004", "20000005"],
-        "Model Prediction": ["98% Fraud", "Low Risk", "85% Fraud", "92% Fraud", "High Risk"],
-        "Analyst Decision": ["Confirmed", "Cleared", "Dismissed", "Confirmed", "Investigating"],
-        "Log Status": ["Verified", "Verified", "Verified", "Verified", "Pending"]
-    }
-    st.table(pd.DataFrame(log_data))
+    m1, m2 = st.columns(2)
+    m1.metric("PENDING", total_r - done_r)
+    m2.metric("COMPLETED", done_r)
+
+    query = """
+        SELECT id, Annual_Income, Credit_Score 
+        FROM credit_risk_production_final 
+        WHERE id NOT IN (SELECT case_id FROM cases_resolved WHERE type = 'Credit Risk')
+        LIMIT 15
+    """
+    df = execute_custom_query(query)
+
+    if not df.empty:
+        for _, row in df.iterrows():
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([2, 2, 1])
+                c1.write(f"**CUST-{row['id']}** | **Income:** ${row['Annual_Income']:,}")
+                c2.write(f"**Score:** {row['Credit_Score']}")
+                if c3.button("WORK CASE", key=f"risk_{row['id']}", use_container_width=True, type="primary"):
+                    st.session_state['selected_risk_id'] = row['id']
+                    st.rerun()

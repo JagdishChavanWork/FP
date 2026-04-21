@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 import os
+import datetime
 
 DB_PATH = 'fraudpulse_system.db'
 
@@ -17,7 +18,7 @@ def initialize_database():
     cursor.execute('''CREATE TABLE IF NOT EXISTS employees 
         (id TEXT PRIMARY KEY, name TEXT, email TEXT, role TEXT, dept TEXT, status TEXT)''')
     
-    # 2. Fraud Data Table (Optimized with specific types)
+    # 2. Fraud Data Table
     cursor.execute('''CREATE TABLE IF NOT EXISTS fraud_data 
         (id INTEGER PRIMARY KEY AUTOINCREMENT, step INTEGER, type TEXT, amount REAL, 
          nameOrig TEXT, oldbalanceOrg REAL, newbalanceOrig REAL, nameDest TEXT, 
@@ -29,13 +30,12 @@ def initialize_database():
          Num_Bank_Accounts REAL, Num_Credit_Card REAL, Interest_Rate REAL, 
          Num_of_Loan REAL, Credit_Score TEXT, Risk_Score_Proxy REAL)''')
 
-    # 4. Global Audit Table
+    # 4. Global Audit Table (Tracking solved cases)
     cursor.execute('''CREATE TABLE IF NOT EXISTS cases_resolved 
         (case_id TEXT PRIMARY KEY, type TEXT, model_verdict TEXT, 
          analyst_verdict TEXT, comment TEXT, resolved_at DATETIME)''')
 
-    # --- PERFORMANCE INDEXES (The 'Search Shortcut' for SQL) ---
-    # These prevent the "Screen Stuck" issue by allowing instant filtering
+    # PERFORMANCE INDEXES
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fraud_type ON fraud_data(type)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fraud_isfraud ON fraud_data(isFraud)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_score ON risk_data(Credit_Score)")
@@ -44,24 +44,16 @@ def initialize_database():
     conn.close()
 
 def migrate_csv_to_db(fraud_path, risk_path):
-    """
-    Ingests CSV data into SQLite only if the tables are empty.
-    This ensures 'Incremental Growth' without duplicating existing data.
-    """
+    """Ingests CSV data into SQLite only if the tables are empty."""
     conn = get_db_connection()
-    
-    # --- Process Fraud Dataset ---
     if os.path.exists(fraud_path):
         db_count = pd.read_sql_query("SELECT count(*) as total FROM fraud_data", conn).iloc[0]['total']
         if db_count == 0:
-            # We use chunksize to prevent memory crashes during large file ingestion
             for chunk in pd.read_csv(fraud_path, chunksize=10000):
-                # Clean columns to match our schema exactly
                 cols = ['step', 'type', 'amount', 'nameOrig', 'oldbalanceOrg', 
                         'newbalanceOrig', 'nameDest', 'isFraud', 'isFlaggedFraud']
                 chunk[cols].to_sql('fraud_data', conn, if_exists='append', index=False)
 
-    # --- Process Risk Dataset ---
     if os.path.exists(risk_path):
         db_count = pd.read_sql_query("SELECT count(*) as total FROM risk_data", conn).iloc[0]['total']
         if db_count == 0:
@@ -79,5 +71,33 @@ def execute_custom_query(query):
     try:
         df = pd.read_sql_query(query, conn)
         return df
+    except Exception as e:
+        print(f"Query Error: {e}")
+        return pd.DataFrame()
+    finally:
+        conn.close()
+
+def save_analyst_verdict(case_id, case_type, model_verdict, analyst_verdict, comment):
+    """
+    Saves the analyst's decision to the database to track completed tasks.
+    Used to update the 'Tasks Completed' counters.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    try:
+        # We use INSERT OR REPLACE so if an analyst updates a comment, it updates the same row
+        cursor.execute('''
+            INSERT OR REPLACE INTO cases_resolved 
+            (case_id, type, model_verdict, analyst_verdict, comment, resolved_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (f"TXN-{case_id}", case_type, model_verdict, analyst_verdict, comment, now))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Database Save Error: {e}")
+        return False
     finally:
         conn.close()
